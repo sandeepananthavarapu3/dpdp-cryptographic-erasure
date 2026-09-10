@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Console | Data Fiduciary</title>
+    <style>
+        body { font-family: monospace; background-color: #1e1e1e; color: #d4d4d4; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { color: #569cd6; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        .dashboard-header { display: flex; justify-content: space-between; align-items: center; background: #252526; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 4px solid #c586c0; }
+        button { background: #0e639c; color: white; border: none; padding: 8px 15px; cursor: pointer; border-radius: 3px; font-family: monospace; }
+        button:hover { background: #1177bb; }
+        .btn-test { background: #4caf50; }
+        .btn-test:hover { background: #45a049; }
+        .btn-kill { background: #d32f2f; color: white; border: none; border-radius: 3px; padding: 2px 6px; font-size: 10px; cursor: pointer; margin-left: 10px; font-weight: bold; }
+        .btn-kill:hover { background: #b71c1c; }
+        table { width: 100%; border-collapse: collapse; background: #252526; border-radius: 5px; overflow: hidden; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #333; vertical-align: top; }
+        th { background-color: #2d2d30; color: #9cdcfe; }
+        .shares-safe { color: #b5cea8; }
+        .shares-danger { color: #f44336; }
+        pre { background: #000; padding: 10px; border-radius: 5px; overflow-x: auto; color: #ce9178; }
+        .ipfs-link { color: #4daaf9; text-decoration: none; font-weight: bold; }
+        .ipfs-link:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>System Audit: Data Fiduciary Control Plane</h1>
+    
+    <div class="dashboard-header">
+        <div>
+            <strong>Compliance Status:</strong> Automated <br>
+            <strong>TSS Threshold Rule:</strong> 3-of-5 required for decryption
+        </div>
+        <button onclick="fetchAuditLogs()">Refresh Vault State</button>
+    </div>
+
+    <div id="output-log"></div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>File ID</th>
+                <th>File Name</th>
+                <th>IPFS CID (Encrypted Payload)</th> <th>Key Shards in Vault</th>
+                <th>Audit Action</th>
+            </tr>
+        </thead>
+        <tbody id="adminBody"></tbody>
+    </table>
+</div>
+
+<script>
+    const API_URL = "http://127.0.0.1:8000";
+
+    async function fetchAuditLogs() {
+        try {
+            const response = await fetch(`${API_URL}/debug/vault`);
+            const data = await response.json();
+            const tbody = document.getElementById('adminBody');
+            tbody.innerHTML = "";
+
+            if (Object.keys(data).length === 0) {
+                tbody.innerHTML = "<tr><td colspan='5'>No data in vault. Waiting for Data Principals.</td></tr>";
+                return;
+            }
+
+            for (const [fid, info] of Object.entries(data)) {
+                const shares = info.total_shares_remaining;
+                const isShredded = shares < 3;
+                
+                // Build a list of individual nodes with Kill buttons
+                let nodesHtml = "";
+                info.share_coordinates.forEach(coord => {
+                    const match = coord.match(/Node (\d+)/);
+                    if (match) {
+                        const nodeId = match[1];
+                        nodesHtml += `
+                            <div style="margin-bottom:6px; display:flex; align-items:center;">
+                                <span style="display:inline-block; width:150px; font-size:11px;">${coord}</span>
+                                <button class="btn-kill" onclick="killNode('${fid}', ${nodeId})">KILL NODE</button>
+                            </div>
+                        `;
+                    }
+                });
+                
+                tbody.innerHTML += `
+                    <tr>
+                        <td style="color:#dcdcaa; font-size:12px;">${fid.substring(0,8)}...</td>
+                        <td>${info.filename}</td>
+                        <td style="max-width:200px; word-wrap:break-word; font-size:11px;">
+                            <a href="https://ipfs.io/ipfs/${info.ipfs_cid}" target="_blank" class="ipfs-link">
+                                🌐 ${info.ipfs_cid}
+                            </a>
+                        </td>
+                        <td class="${isShredded ? 'shares-danger' : 'shares-safe'}">
+                            <strong style="font-size:14px;">${shares} / 5 Shares</strong><br><br>
+                            ${nodesHtml}
+                            <small style="display:block; margin-top:8px; font-weight:bold;">
+                                ${isShredded ? '❌ Mathematically Unreadable' : '✅ Threshold Maintained'}
+                            </small>
+                        </td>
+                        <td>
+                            <button class="btn-test" onclick="testAccess('${fid}')" style="${isShredded ? 'background:#555; cursor:not-allowed;' : ''}">Test Access</button>
+                        </td>
+                    </tr>
+                `;
+            }
+        } catch (e) {
+            document.getElementById('output-log').innerHTML = `<pre>Error: Cannot connect to backend.</pre>`;
+        }
+    }
+
+    async function killNode(fid, nodeId) {
+        if(!confirm(`Are you sure you want to destroy Node ${nodeId}?`)) return;
+        try {
+            await fetch(`${API_URL}/delete/share/${fid}/${nodeId}`, { method: "POST" });
+            fetchAuditLogs(); 
+        } catch (e) {
+            alert("Network Error while killing node.");
+        }
+    }
+
+    async function testAccess(fid) {
+        try {
+            const response = await fetch(`${API_URL}/access/${fid}`);
+            const data = await response.json();
+            const logBox = document.getElementById('output-log');
+            
+            if (response.ok && data.status === "Granted") {
+                logBox.innerHTML = `<pre style="color:#4caf50;">[✓] Access Validated. System successfully reconstructed the file.\nHex Signature: ${data.preview_bytes_hex}</pre>`;
+            } else {
+                logBox.innerHTML = `<pre style="color:#f44336;">[✖] ACCESS DENIED.\nDetails: ${data.message || data.detail}</pre>`;
+            }
+        } catch (e) {
+            alert("Network Error");
+        }
+    }
+
+    fetchAuditLogs();
+</script>
+</body>
+</html>

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DPDP Privacy Vault | Cryptographic Erasure</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        .upload-section { background: #e8f4f8; padding: 20px; border-radius: 8px; margin-bottom: 30px; border: 1px dashed #3498db; }
+        input[type="file"] { margin-bottom: 10px; }
+        button { padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        .btn-upload { background-color: #3498db; color: white; }
+        .btn-upload:hover { background-color: #2980b9; }
+        .btn-access { background-color: #2ecc71; color: white; margin-right: 5px; }
+        .btn-access:hover { background-color: #27ae60; }
+        .btn-delete { background-color: #e74c3c; color: white; }
+        .btn-delete:hover { background-color: #c0392b; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #f8f9fa; }
+        .status-active { color: #2ecc71; font-weight: bold; }
+        .status-erased { color: #e74c3c; font-weight: bold; }
+        .tx-hash { font-family: monospace; font-size: 0.85em; color: #7f8c8d; }
+        #alert-box { display: none; padding: 15px; margin-bottom: 20px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Data Fiduciary Portal (DPDP Compliant)</h1>
+    
+    <div id="alert-box"></div>
+
+    <div class="upload-section">
+        <h3>1. Secure Upload (Cryptographic Splitting)</h3>
+        <p>Select a file to encrypt and distribute across the decentralized vault.</p>
+        <input type="file" id="fileInput">
+        <button class="btn-upload" onclick="uploadFile()">Securely Store Data</button>
+    </div>
+
+    <h3>2. Privacy Dashboard (Your Data)</h3>
+    <table id="vaultTable">
+        <thead>
+            <tr>
+                <th>File Name</th>
+                <th>Status</th>
+                <th>Blockchain Receipt</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="vaultBody">
+            </tbody>
+    </table>
+</div>
+
+<script>
+    const API_URL = "http://127.0.0.1:8000";
+    let myFiles = []; // Store local session data
+
+    function showAlert(message, isError = false) {
+        const box = document.getElementById('alert-box');
+        box.style.display = 'block';
+        box.style.backgroundColor = isError ? '#fadbd8' : '#d5f5e3';
+        box.style.color = isError ? '#c0392b' : '#27ae60';
+        box.style.border = `1px solid ${isError ? '#e74c3c' : '#2ecc71'}`;
+        box.innerHTML = message;
+        setTimeout(() => box.style.display = 'none', 6000);
+    }
+
+    async function uploadFile() {
+        const fileInput = document.getElementById('fileInput');
+        if (!fileInput.files[0]) {
+            showAlert("Please select a file first.", true);
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("file", fileInput.files[0]);
+
+        try {
+            const response = await fetch(`${API_URL}/upload`, {
+                method: "POST",
+                body: formData
+            });
+            const data = await response.json();
+
+            if (response.ok) {
+                showAlert(`<b>Success!</b> File encrypted and key split into 5 shares.`);
+                myFiles.push({
+                    id: data.file_id,
+                    name: fileInput.files[0].name,
+                    tx: data.blockchain_tx,
+                    status: 'Active'
+                });
+                renderTable();
+                fileInput.value = ""; // Clear input
+            } else {
+                showAlert("Upload failed: " + data.detail, true);
+            }
+        } catch (error) {
+            showAlert("Server error. Is FastAPI running?", true);
+        }
+    }
+
+    async function accessFile(fileId) {
+        try {
+            const response = await fetch(`${API_URL}/access/${fileId}`);
+            const data = await response.json();
+
+            if (response.ok && data.status === "Granted") {
+                showAlert(`<b>Access Granted:</b> Key reconstructed using 3/5 shares. <br><small>Preview Bytes: ${data.preview_bytes_hex}</small>`);
+            } else {
+                showAlert(`<b>Access Denied:</b> ${data.message || data.detail || 'Data permanently unreadable.'}`, true);
+            }
+        } catch (error) {
+            showAlert("Error communicating with the network.", true);
+        }
+    }
+
+    async function shredFile(fileId, index) {
+        if (!confirm("Are you sure? This will cryptographically shred 3 key shares. It cannot be undone.")) return;
+
+        try {
+            const response = await fetch(`${API_URL}/delete/${fileId}`, { method: "POST" });
+            const data = await response.json();
+
+            if (response.ok) {
+                showAlert(`<b>Proof of Erasure Registered.</b><br>Transaction: ${data.blockchain_tx}`);
+                myFiles[index].status = 'Erased';
+                renderTable();
+            } else {
+                showAlert("Erasure failed: " + data.detail, true);
+            }
+        } catch (error) {
+            showAlert("Error communicating with the network.", true);
+        }
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('vaultBody');
+        tbody.innerHTML = "";
+
+        myFiles.forEach((file, index) => {
+            const isErased = file.status === 'Erased';
+            const statusHtml = isErased ? `<span class="status-erased">✖ Cryptographically Erased</span>` : `<span class="status-active">✔ Active (3/5 Shares)</span>`;
+            
+            const actionHtml = isErased 
+                ? `<button class="btn-access" onclick="accessFile('${file.id}')">Verify Audit</button>`
+                : `<button class="btn-access" onclick="accessFile('${file.id}')">Access</button>
+                   <button class="btn-delete" onclick="shredFile('${file.id}', ${index})">Shred Data</button>`;
+
+            tbody.innerHTML += `
+                <tr>
+                    <td><strong>${file.name}</strong><br><small style="color:gray;">ID: ${file.id.substring(0,8)}...</small></td>
+                    <td>${statusHtml}</td>
+                    <td class="tx-hash">${file.tx.substring(0, 15)}...</td>
+                    <td>${actionHtml}</td>
+                </tr>
+            `;
+        });
+    }
+</script>
+</body>
+</html>

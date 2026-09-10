@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Portal | DPDP Privacy Controls</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8f9fa; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #1abc9c; padding-bottom: 10px; }
+        .upload-section { background: #e8f8f5; padding: 20px; border-radius: 8px; margin-bottom: 30px; border: 1px solid #1abc9c; }
+        button { padding: 8px 12px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.3s; margin-right: 5px; }
+        .btn-upload { background-color: #1abc9c; color: white; padding: 10px 15px; }
+        .btn-upload:hover { background-color: #16a085; }
+        .btn-view { background-color: #3498db; color: white; }
+        .btn-view:hover { background-color: #2980b9; }
+        .btn-delete { background-color: #e74c3c; color: white; }
+        .btn-delete:hover { background-color: #c0392b; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #f1f2f6; }
+        .status-active { color: #27ae60; font-weight: bold; }
+        .status-erased { color: #e74c3c; font-weight: bold; }
+        #alert-box { display: none; padding: 15px; margin-bottom: 20px; border-radius: 5px; }
+        
+        /* New Secure Viewer Box */
+        #secure-viewer { display: none; margin-top: 30px; padding: 20px; border: 2px dashed #3498db; border-radius: 8px; background: #f0f8ff; text-align: center; }
+        #secure-viewer img { max-width: 100%; border-radius: 5px; margin-top: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Data Principal Rights Portal</h1>
+    <p>Manage your personal data and exercise your Right to Erasure under the DPDP Act.</p>
+    
+    <div id="alert-box"></div>
+
+    <div class="upload-section">
+        <h3>Consent & Provide Data</h3>
+        <input type="file" id="fileInput">
+        <button class="btn-upload" onclick="uploadFile()">Submit Securely</button>
+    </div>
+
+    <h3>My Active Data</h3>
+    <table id="vaultTable">
+        <thead>
+            <tr>
+                <th>File Name</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="vaultBody"></tbody>
+    </table>
+
+    <div id="secure-viewer">
+        <h3 id="viewer-title" style="color: #2980b9; margin-top:0;">Secure Data Reconstruction</h3>
+        <p style="font-size: 0.9em; color: gray;">This image was mathematically reconstructed from 3 decentralized key shards.</p>
+        <img id="decrypted-image" src="" alt="Decrypted File">
+    </div>
+</div>
+
+<script>
+    const API_URL = "http://127.0.0.1:8000";
+    let myFiles = []; 
+
+    function showAlert(msg, isError=false) {
+        const box = document.getElementById('alert-box');
+        box.style.display = 'block';
+        box.style.backgroundColor = isError ? '#fadbd8' : '#d5f5e3';
+        box.style.color = isError ? '#c0392b' : '#27ae60';
+        box.innerHTML = msg;
+        setTimeout(() => box.style.display = 'none', 5000);
+    }
+
+    async function uploadFile() {
+        const fileInput = document.getElementById('fileInput');
+        if (!fileInput.files[0]) return showAlert("Please select a file.", true);
+
+        const formData = new FormData();
+        formData.append("file", fileInput.files[0]);
+
+        const response = await fetch(`${API_URL}/upload`, { method: "POST", body: formData });
+        const data = await response.json();
+
+        if (response.ok) {
+            showAlert(`File securely transmitted and distributed.`);
+            myFiles.push({ id: data.file_id, name: fileInput.files[0].name, status: 'Active' });
+            renderTable();
+            fileInput.value = ""; 
+        }
+    }
+
+    async function viewFile(fileId) {
+        const viewer = document.getElementById('secure-viewer');
+        const img = document.getElementById('decrypted-image');
+        viewer.style.display = 'none'; // Hide viewer while loading
+
+        try {
+            const response = await fetch(`${API_URL}/access/${fileId}`);
+            const data = await response.json();
+
+            if (response.ok && data.status === "Granted") {
+                showAlert(`<b>Access Granted:</b> Keys successfully combined.`);
+                document.getElementById('viewer-title').innerText = `Reconstructed: ${data.filename}`;
+                // Inject the Base64 image directly into the HTML
+                img.src = "data:image/png;base64," + data.file_data_b64;
+                viewer.style.display = 'block';
+            } else {
+                showAlert(`<b>Access Denied:</b> ${data.message || data.detail}`, true);
+            }
+        } catch (error) {
+            showAlert("Error communicating with the network.", true);
+        }
+    }
+
+    async function shredFile(fileId, index) {
+        if (!confirm("Exercise Right to Erasure? This physically shreds your keys.")) return;
+        const response = await fetch(`${API_URL}/delete/${fileId}`, { method: "POST" });
+        if (response.ok) {
+            showAlert(`<b>Data Erased.</b> Blockchain receipt generated.`);
+            myFiles[index].status = 'Erased';
+            document.getElementById('secure-viewer').style.display = 'none'; // Hide image if it was open
+            renderTable();
+        }
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('vaultBody');
+        tbody.innerHTML = "";
+        myFiles.forEach((f, i) => {
+            const isErased = f.status === 'Erased';
+            
+            // If active, show View and Shred. If erased, show Verify Block
+            const actions = !isErased 
+                ? `<button class="btn-view" onclick="viewFile('${f.id}')">View Data</button>
+                   <button class="btn-delete" onclick="shredFile('${f.id}', ${i})">Revoke & Erase</button>`
+                : `<button class="btn-view" onclick="viewFile('${f.id}')" style="background:#95a5a6;">Verify Block</button>`;
+
+            tbody.innerHTML += `
+                <tr>
+                    <td>${f.name}<br><small>${f.id.substring(0,8)}...</small></td>
+                    <td>${isErased ? '<span class="status-erased">Erased</span>' : '<span class="status-active">Active</span>'}</td>
+                    <td>${actions}</td>
+                </tr>`;
+        });
+    }
+</script>
+</body>
+</html>

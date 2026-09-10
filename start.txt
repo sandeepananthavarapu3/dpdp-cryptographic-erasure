@@ -1,0 +1,46 @@
+start.txt
+
+No problem at all! Since a reboot clears the memory and shuts down your local Ethereum node, we need to spin up the architecture layer by layer.
+
+Because Hardhat resets its state when closed, we also need to quickly redeploy the Smart Contract so the backend has a fresh ledger to talk to.
+
+Here is the 4-step launch sequence. You will need three separate terminal windows open.
+Terminal 1: Start the Blockchain Node
+
+This will be your immutable ledger. Keep this terminal open and running in the background.
+Bash
+
+cd ~/major
+npx hardhat node
+
+(You will see the list of 20 test accounts with their private keys appear.)
+Terminal 2: Deploy the Smart Contract
+
+Now we need to push your DPDPErasure.sol contract onto that local node. Open a new terminal tab.
+Bash
+
+cd ~/major
+npx hardhat run deploy.js --network localhost
+
+(If your deploy script is inside an ignition/ or scripts/ folder, adjust the path accordingly. Important: Check the terminal output to ensure the deployed address matches the contract_address at the top of your main.py file, which is usually 0x5fb...aa3).
+Terminal 3: Start the FastAPI Backend
+
+This will be your Data Fiduciary API. Open a third terminal tab and make sure to activate your Python virtual environment.
+Bash
+
+cd ~/major
+source venv/bin/activate
+python main.py
+
+(You should see Uvicorn running on http://0.0.0.0:8000)
+Step 4: Launch the Privacy Dashboard
+
+Finally, you don't need a terminal for the frontend.
+
+    Open your File Explorer.
+
+    Navigate to your major folder.
+
+    Double-click index.html to open it in your web browser.
+
+Your full-stack M.Tech project is now completely online and ready for testing or demonstration! Let me know if any of the servers throw an error during startup.

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud Infrastructure | Node Monitor</title>
+    <style>
+        body { font-family: 'Courier New', Courier, monospace; background-color: #0d1117; color: #c9d1d9; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { color: #58a6ff; border-bottom: 1px solid #30363d; padding-bottom: 10px; }
+        .server-rack { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 20px; margin-bottom: 20px; }
+        .rack-header { display: flex; justify-content: space-between; border-bottom: 1px dashed #30363d; padding-bottom: 10px; margin-bottom: 15px; color: #8b949e; }
+        .ciphertext-box { background: #010409; padding: 15px; border-radius: 4px; border: 1px solid #30363d; word-wrap: break-word; font-size: 0.85em; color: #ff7b72; margin-bottom: 15px; max-height: 80px; overflow-y: auto; }
+        .nodes-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+        .node-card { background: #21262d; border: 1px solid #30363d; padding: 10px; border-radius: 4px; text-align: center; font-size: 0.8em; }
+        .node-active { border-top: 3px solid #3fb950; }
+        .node-destroyed { border-top: 3px solid #f85149; color: #8b949e; background: #010409; }
+        button { background: #238636; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 6px; font-family: inherit; font-weight: bold; }
+        button:hover { background: #2ea043; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>AWS / Decentralized Cloud Storage Monitor</h1>
+    <p style="color: #8b949e;">View physical ciphertext payloads and distributed Shamir key shards.</p>
+    <button onclick="fetchCloudData()" style="margin-bottom: 20px;">Ping Cloud Servers</button>
+
+    <div id="cloud-racks">
+        </div>
+</div>
+
+<script>
+    const API_URL = "http://127.0.0.1:8000";
+
+    async function fetchCloudData() {
+        try {
+            const response = await fetch(`${API_URL}/cloud/storage`);
+            const data = await response.json();
+            const container = document.getElementById('cloud-racks');
+            container.innerHTML = "";
+
+            if (Object.keys(data).length === 0) {
+                container.innerHTML = "<p>No data found in cloud sectors.</p>";
+                return;
+            }
+
+            for (const [fid, info] of Object.entries(data)) {
+                // Build the Node Grid
+                let nodesHtml = "";
+                const activeNodes = info.active_nodes.map(n => n.node_id);
+                
+                // We always have 5 total possible nodes in our architecture
+                for(let i = 1; i <= 5; i++) {
+                    const nodeData = info.active_nodes.find(n => n.node_id === i);
+                    if(nodeData) {
+                        nodesHtml += `
+                            <div class="node-card node-active">
+                                <strong style="color:#3fb950">NODE ${i}</strong><br>
+                                <br>${nodeData.share_data.substring(0, 15)}...
+                            </div>`;
+                    } else {
+                        nodesHtml += `
+                            <div class="node-card node-destroyed">
+                                <strong>NODE ${i}</strong><br>
+                                <br>[SHARD DESTROYED]
+                            </div>`;
+                    }
+                }
+
+                container.innerHTML += `
+                    <div class="server-rack">
+                        <div class="rack-header">
+                            <span><strong>FILE ID:</strong> ${fid}</span>
+                            <span><strong>ORIGIN NAME:</strong> ${info.filename}</span>
+                        </div>
+                        
+                        <strong style="color: #58a6ff;">RAW CIPHERTEXT PAYLOAD (AES-256):</strong>
+                        <div class="ciphertext-box">
+                            ${info.ciphertext_raw}
+                        </div>
+
+                        <strong style="color: #58a6ff;">DISTRIBUTED KEY SHARDS (TSS):</strong>
+                        <div class="nodes-grid">
+                            ${nodesHtml}
+                        </div>
+                    </div>
+                `;
+            }
+        } catch (e) {
+            document.getElementById('cloud-racks').innerHTML = "<p style='color:red;'>Connection to Cloud Providers failed.</p>";
+        }
+    }
+
+    // Ping on load
+    fetchCloudData();
+</script>
+
+</body>
+</html>
