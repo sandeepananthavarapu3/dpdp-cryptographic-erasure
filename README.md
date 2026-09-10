@@ -6,6 +6,10 @@ This project implements a cryptographic erasure system enforcing India's Digital
 
 The system addresses the challenge of permanently deleting data from immutable storage (like IPFS) by implementing cryptographic erasure through Shamir's Secret Sharing, while maintaining compliance with the DPDP Act through blockchain-based audit logging.
 
+## Demo
+
+🎥 **Watch the project demo**: [DPDP System Demo Video](https://drive.google.com/file/d/19nqmCuxDL8ZXLfeoyeqTPECE5WnHcWet/view?usp=drive_link)
+
 ## Features
 
 - **Threshold Secret Sharing**: Implements Shamir's secret sharing algorithm to split encryption keys into shares
